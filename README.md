@@ -12,6 +12,7 @@
   <img alt="Clerk" src="https://img.shields.io/badge/auth-Clerk-6c47ff?logo=clerk&logoColor=white">
   <img alt="pnpm" src="https://img.shields.io/badge/pnpm-10.33-f69220?logo=pnpm&logoColor=white">
   <img alt="Vercel" src="https://img.shields.io/badge/deployed%20on-Vercel-black?logo=vercel">
+  <a href="CONTRIBUTING.md#a-map-of-the-code-optional"><img alt="Code map: graphify" src="https://img.shields.io/badge/code%20map-graphify-0b7285"></a>
 </p>
 
 <p align="center"><img src="docs/harness.png" alt="A harness page in Harness Hub: its goal and when it is meant to run, the prompt, skill, tool, hooks and memory it is built from, and its variables with the reader's own saved value" width="560"></p>
