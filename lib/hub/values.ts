@@ -1,4 +1,7 @@
-import { db, ensureReady, findHarness, LOOKS_SECRET, SECRET, TABLES, type Row } from "./harnesses";
+import { db, TABLES, type Row } from "./db";
+import { LOOKS_SECRET, SECRET } from "./harnesses";
+import { findHarness } from "./read";
+import { ensureReady } from "./setup";
 import type { Member } from "./members";
 import { oneLine, SLUG } from "./safe-text";
 import type { HarnessView, Variable } from "./types";

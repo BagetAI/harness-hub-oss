@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PartRow } from "@/components/part-row";
-import { partOf } from "@/lib/hub/harnesses";
+import { partOf } from "@/lib/hub/read";
 import { usersOf } from "@/lib/hub/library";
 import { KIND } from "@/lib/hub/parts";
 import type { HarnessView, PartKind } from "@/lib/hub/types";

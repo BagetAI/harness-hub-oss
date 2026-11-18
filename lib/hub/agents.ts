@@ -1,5 +1,6 @@
 import type { Access } from "./access";
-import { db, ensureReady, TABLES, type Row } from "./harnesses";
+import { db, TABLES, type Row } from "./db";
+import { ensureReady } from "./setup";
 import type { Member } from "./members";
 
 /**

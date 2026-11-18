@@ -2,27 +2,9 @@ import { createMcpHandler, withMcpAuth } from "mcp-handler";
 import { z } from "zod";
 import { harnessUrl, hubUrl } from "@/lib/hub/config";
 import { addedLinks, fieldDiffs, mergeOnto, renderDiffs, withNames } from "@/lib/hub/diff";
-import {
-  appendMemory,
-  everything,
-  findHarness,
-  LOAD_LIMIT,
-  loadSize,
-  findSuggestion,
-  PARTS_BECAME_PIECES,
-  pieceNames,
-  reviewSuggestion,
-  saveHarness,
-  setArchived,
-  setEditor,
-  setVisibility,
-  suggestChange,
-  suggestionsFor,
-  versionFields,
-  versionsOf,
-  waitingFor,
-  type Edit,
-} from "@/lib/hub/harnesses";
+import { appendMemory, LOAD_LIMIT, loadSize, findSuggestion, reviewSuggestion, saveHarness, setArchived, setEditor, setVisibility, suggestChange, suggestionsFor, waitingFor, type Edit } from "@/lib/hub/harnesses";
+import { everything, findHarness, pieceNames, versionFields, versionsOf } from "@/lib/hub/read";
+import { PARTS_BECAME_PIECES } from "@/lib/hub/setup";
 import { usersOf } from "@/lib/hub/library";
 import type { Member } from "@/lib/hub/members";
 import { undeclaredNames } from "@/lib/hub/parts";

@@ -1,4 +1,4 @@
-import { findHarness } from "./harnesses";
+import { findHarness } from "./read";
 import type { Member } from "./members";
 import type { HarnessView } from "./types";
 

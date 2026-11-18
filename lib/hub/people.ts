@@ -1,4 +1,5 @@
-import { db, ensureReady, TABLES, type Row } from "./harnesses";
+import { db, TABLES, type Row } from "./db";
+import { ensureReady } from "./setup";
 import { isAllowed, normalizeEmail, type Member } from "./members";
 
 /**

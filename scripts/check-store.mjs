@@ -17,7 +17,9 @@ if (process.env.HUB_TABLE_PREFIX !== "dev_") {
   process.exit(1);
 }
 register("./ts-resolve.mjs", import.meta.url);
-const { appendMemory, db, everything, findHarness, reviewSuggestion, saveHarness: saveAs, setArchived, setEditor, setVisibility, suggestChange, suggestionsFor, versionFields, versionsOf, waitingFor } = await import("../lib/hub/harnesses.ts");
+const { db } = await import("../lib/hub/db.ts");
+const { appendMemory, reviewSuggestion, saveHarness: saveAs, setArchived, setEditor, setVisibility, suggestChange, suggestionsFor, waitingFor } = await import("../lib/hub/harnesses.ts");
+const { everything, findHarness, versionFields, versionsOf } = await import("../lib/hub/read.ts");
 // The checks below were written when every item was seen by the whole team: what they create is a team item unless a
 // check says otherwise. The checks of visibility itself, at the end, create private items on purpose.
 const saveHarness = (member, input) => saveAs(member, { visibility: "team", ...input });

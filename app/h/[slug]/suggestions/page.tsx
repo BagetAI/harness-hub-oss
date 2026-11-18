@@ -7,7 +7,8 @@ import { PieceRow } from "@/components/piece-row";
 import { ReviewForm } from "@/components/review-form";
 import Link from "next/link";
 import { addedLinks, describeChanges, fieldDiffs, mergeOnto, withNames } from "@/lib/hub/diff";
-import { canEdit, pieceNames, suggestionsFor, versionFields } from "@/lib/hub/harnesses";
+import { canEdit, suggestionsFor } from "@/lib/hub/harnesses";
+import { pieceNames, versionFields } from "@/lib/hub/read";
 import { locate } from "@/lib/hub/locate";
 import { day } from "@/lib/hub/safe-text";
 

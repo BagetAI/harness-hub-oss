@@ -1,4 +1,7 @@
-import { db, ensureReady, findHarness, LOOKS_SECRET, pieceNames, SECRET, seesSql, TABLES, type Row } from "./harnesses";
+import { db, seesSql, TABLES, type Row } from "./db";
+import { LOOKS_SECRET, SECRET } from "./harnesses";
+import { findHarness, pieceNames } from "./read";
+import { ensureReady } from "./setup";
 import { blamedParts } from "./parts";
 import type { Member } from "./members";
 import { oneLine, personText, SLUG } from "./safe-text";

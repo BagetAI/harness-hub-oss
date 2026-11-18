@@ -1,13 +1,15 @@
-import { neon } from "@neondatabase/serverless";
-import { builtInHarnesses } from "./built-in";
-import { canSee, visibilityOf, type Visibility } from "./visibility";
-import { describeChanges, mergeOnto, withNames, type Fields } from "./diff";
+import { describeChanges, type Fields, mergeOnto, withNames } from "./diff";
 import type { Member } from "./members";
 import { oneLine, personText, quoted, SLUG, VARIABLE_KEY } from "./safe-text";
-import type { HarnessContent, HarnessView, ItemKind, Part, PartKind, Person, Suggestion, Variable, VersionLine } from "./types";
+import type { HarnessContent, HarnessView, ItemKind, Part, PartKind, Person, Suggestion, Variable } from "./types";
+import { canSee, type Visibility } from "./visibility";
+import { contentOf, db, HARNESSES, isCount, ROLES, type Row, seesSql, type Sql, SUGGESTIONS, VERSIONS } from "./db";
+import { findHarness, findStored, KINDS, LATEST, NOTES_ONLY, pieceNames, piecesBySlug, PRIVATE_PIECE, TAKEN_OVER, toView, VIEW, writersOf } from "./read";
+import { convertOldParts, ensureReady } from "./setup";
+import { headOf, madeSlug } from "./slugs";
 
 /**
- * The store. Pages and the connector both ask here and nowhere else.
+ * The store. Pages and the connector ask it, in this file and the four next to it, and never the database directly.
  *
  * An item is a harness or a piece: a skill, tool, hook or memory. Both live in
  * the same tables and follow the same rules: a row holds what does not change
@@ -21,694 +23,17 @@ import type { HarnessContent, HarnessView, ItemKind, Part, PartKind, Person, Sug
  * loaded. Text that arrives inside a harness is made into pieces for it, so
  * every skill, tool, hook and memory can be found, loaded, saved and
  * suggested on by itself.
- */
-
-// Local development and the check script use their own tables (prefix "dev_"),
-// in the same database, so tests never touch what people saved.
-const PREFIX = /^[a-z_]{0,12}$/.test(process.env.HUB_TABLE_PREFIX ?? "") ? (process.env.HUB_TABLE_PREFIX ?? "") : "";
-const HARNESSES = `${PREFIX}harnesses`;
-const VERSIONS = `${PREFIX}versions`;
-const SUGGESTIONS = `${PREFIX}suggestions`;
-const ROLES = `${PREFIX}roles`;
-const RUNS = `${PREFIX}runs`;
-const MEMBERS = `${PREFIX}members`;
-const AGENTS = `${PREFIX}agents`;
-const VALUES = `${PREFIX}var_values`;
-
-/** Table names, for the modules that keep runs and members next to this one. */
-/**
- * The rule of lib/hub/visibility.ts as SQL, for queries that list rows of items: whether the person whose address is
- * the parameter `email` sees the item in the table alias `h`. Its owner and editors do, and for a piece made for a
- * harness, whoever can change that harness.
- */
-export const seesSql = (h: string, email: string) =>
-  `(${h}.visibility <> 'private' OR ${h}.owner_email = ${email}
-    OR EXISTS (SELECT 1 FROM ${ROLES} sx WHERE sx.slug = ${h}.slug AND sx.email = ${email})
-    OR EXISTS (SELECT 1 FROM ${HARNESSES} sm WHERE sm.slug = ${h}.made_for AND sm.owner_email = ${email})
-    OR EXISTS (SELECT 1 FROM ${ROLES} sx WHERE sx.slug = ${h}.made_for AND sx.email = ${email}))`;
-
-export const TABLES = { harnesses: HARNESSES, versions: VERSIONS, suggestions: SUGGESTIONS, roles: ROLES, runs: RUNS, members: MEMBERS, agents: AGENTS, values: VALUES };
-
-export type Row = Record<string, unknown>;
-type Sql = ReturnType<typeof neon>;
-
-/** When versions got a goal of their own. Older versions of a built-in harness take theirs from its definition. */
-const GOAL_ADDED = "2026-11-12T14:00:00Z";
-
-export function db(): Sql {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set");
-  return neon(url);
-}
-
-/** Stored content, with anything missing filled in. */
-function contentOf(raw: unknown): HarnessContent {
-  const content = (raw ?? {}) as Partial<HarnessContent>;
-  return {
-    prompt: content.prompt ?? "",
-    variables: content.variables ?? [],
-    parts: content.parts ?? [],
-    ...(content.when ? { when: content.when } : {}),
-    ...(content.icon ? { icon: content.icon } : {}),
-    ...(typeof content.schedule === "string" && content.schedule ? { schedule: content.schedule } : {}),
-    ...(typeof content.testedOn === "string" && content.testedOn ? { testedOn: content.testedOn } : {}),
-    // A memory piece says whether runs may leave team notes in it: null is no, a text is yes.
-    // Left out, it was saved before notes existed, and stays left out so that this can be told.
-    ...("notes" in content ? { notes: content.notes === null ? null : String(content.notes ?? "") } : {}),
-  };
-}
-
-let ready: Promise<void> | undefined;
-
-/** Creates the tables on first use, and adds the built-in harnesses a Hub starts with. */
-export function ensureReady(): Promise<void> {
-  ready ??= setUp()
-    .catch((error) => {
-      // Two instances starting together on a database with no tables yet can
-      // trip over each other's CREATE TABLE. A second try finds them in place.
-      if (!["23505", "42P07"].includes((error as { code?: string } | null)?.code ?? "")) throw error;
-      return setUp();
-    })
-    .catch((error) => {
-      ready = undefined; // try again on the next request
-      throw error;
-    });
-  return ready;
-}
-
-/** Columns added after the first release. A database made before one of them gets it once. */
-const ADDED_COLUMNS: [table: string, column: string, type: string][] = [
-  // What a version changed against the one before, in words: part "Run log", variables.
-  [VERSIONS, "changes", "text"],
-  // What the agent is for, in one sentence: the outcome, not the steps.
-  [VERSIONS, "goal", "text NOT NULL DEFAULT ''"],
-  // A harness, or a shared piece: skill, tool, hook or memory.
-  [HARNESSES, "kind", "text NOT NULL DEFAULT 'harness'"],
-  // The label of the variable a saved value was given for: a variable that now means something else does not get it.
-  [VALUES, "label", "text"],
-  // Team (everyone sees it) or private (its owner and the people who can change it). Everything from before is team.
-  [HARNESSES, "visibility", "text NOT NULL DEFAULT 'team'"],
-  // Set aside by its owner. Nothing is ever deleted.
-  [HARNESSES, "archived_at", "timestamptz"],
-  // For a piece made from a part of a harness: that harness. Whoever can change it can change the piece.
-  [HARNESSES, "made_for", "text"],
-  // Who dealt with a run that was not fine, when, and what they did about it. Empty while the run is still open.
-  [RUNS, "dealt_by_email", "text"],
-  [RUNS, "dealt_by_name", "text"],
-  [RUNS, "dealt_at", "timestamptz"],
-  [RUNS, "dealt_note", "text"],
-  // Who said it was not dealt with after all. The mark they undid stays in the columns above, so no one's note is lost.
-  [RUNS, "reopened_by_email", "text"],
-  [RUNS, "reopened_by_name", "text"],
-  [RUNS, "reopened_at", "timestamptz"],
-  // Which model the agent said it ran on, and which agent (the app that signed in) it was: how a harness does on each.
-  [RUNS, "model", "text"],
-  [RUNS, "agent", "text"],
-];
-
-async function setUp(): Promise<void> {
-  const sql = db();
-  // Every table, in one round trip. Each statement is safe to run again, and on
-  // a database that already has the tables none of them waits for a reader.
-  await sql.transaction([
-    // Each person's own values for the variables of a harness, for their own runs only (lib/hub/values.ts).
-    sql.query(`CREATE TABLE IF NOT EXISTS ${VALUES} (
-      email text NOT NULL,
-      slug text NOT NULL,
-      key text NOT NULL,
-      value text NOT NULL,
-      updated_at timestamptz NOT NULL DEFAULT now(),
-      PRIMARY KEY (email, slug, key)
-    )`),
-    // The agents each person connected, and what each may do: read only, or read and write (lib/hub/agents.ts).
-    sql.query(`CREATE TABLE IF NOT EXISTS ${AGENTS} (
-      email text NOT NULL,
-      client_id text NOT NULL,
-      name text NOT NULL,
-      access text NOT NULL DEFAULT 'write',
-      first_seen timestamptz NOT NULL DEFAULT now(),
-      last_seen timestamptz NOT NULL DEFAULT now(),
-      changed_at timestamptz,
-      PRIMARY KEY (email, client_id)
-    )`),
-    sql.query(`CREATE TABLE IF NOT EXISTS ${HARNESSES} (
-      slug text PRIMARY KEY,
-      owner_email text NOT NULL,
-      owner_name text NOT NULL,
-      copied_from text,
-      created_at timestamptz NOT NULL DEFAULT now()
-    )`),
-    sql.query(`CREATE TABLE IF NOT EXISTS ${VERSIONS} (
-      slug text NOT NULL REFERENCES ${HARNESSES} (slug),
-      number integer NOT NULL,
-      name text NOT NULL,
-      description text NOT NULL,
-      note text NOT NULL,
-      content jsonb NOT NULL,
-      saved_by_email text NOT NULL,
-      saved_by_name text NOT NULL,
-      saved_at timestamptz NOT NULL DEFAULT now(),
-      PRIMARY KEY (slug, number)
-    )`),
-    sql.query(`CREATE TABLE IF NOT EXISTS ${SUGGESTIONS} (
-      number serial PRIMARY KEY,
-      slug text NOT NULL REFERENCES ${HARNESSES} (slug),
-      base_version integer NOT NULL,
-      title text NOT NULL,
-      proposed jsonb NOT NULL,
-      author_email text NOT NULL,
-      author_name text NOT NULL,
-      status text NOT NULL DEFAULT 'open',
-      comments jsonb NOT NULL DEFAULT '[]'::jsonb,
-      merged_version integer,
-      decided_by_email text,
-      decided_at timestamptz,
-      created_at timestamptz NOT NULL DEFAULT now()
-    )`),
-    // Editors: people the owner lets change an item. Everyone else on the team reads, runs, copies and suggests.
-    sql.query(`CREATE TABLE IF NOT EXISTS ${ROLES} (
-      slug text NOT NULL REFERENCES ${HARNESSES} (slug),
-      email text NOT NULL,
-      name text NOT NULL,
-      added_by_email text NOT NULL,
-      added_at timestamptz NOT NULL DEFAULT now(),
-      PRIMARY KEY (slug, email)
-    )`),
-    // Runs, as the agents that did them reported them.
-    sql.query(`CREATE TABLE IF NOT EXISTS ${RUNS} (
-      id serial PRIMARY KEY,
-      slug text NOT NULL REFERENCES ${HARNESSES} (slug),
-      version integer NOT NULL,
-      user_email text NOT NULL,
-      user_name text NOT NULL,
-      status text NOT NULL,
-      note text NOT NULL DEFAULT '',
-      pieces jsonb NOT NULL DEFAULT '[]'::jsonb,
-      created_at timestamptz NOT NULL DEFAULT now()
-    )`),
-    // People let in from the Hub itself, on top of the addresses in its configuration.
-    sql.query(`CREATE TABLE IF NOT EXISTS ${MEMBERS} (
-      email text PRIMARY KEY,
-      name text NOT NULL DEFAULT '',
-      added_by_email text NOT NULL,
-      added_at timestamptz NOT NULL DEFAULT now()
-    )`),
-  ]);
-  // ALTER TABLE and CREATE INDEX lock their table even when there is nothing
-  // to do, and several of them in one transaction can deadlock with a page
-  // that reads both tables. So a column or an index is made only when it is
-  // missing, one statement at a time. One query says what is there.
-  const RUNS_INDEX = `${RUNS}_by_slug`;
-  const there = new Set(
-    (
-      (await sql.query(
-        `SELECT table_name || '.' || column_name AS name FROM information_schema.columns
-         WHERE table_schema = current_schema() AND table_name = ANY($1::text[])
-         UNION ALL
-         SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND indexname = $2`,
-        [[HARNESSES, VERSIONS, RUNS], RUNS_INDEX],
-      )) as Row[]
-    ).map((r) => String(r.name)),
-  );
-  for (const [table, column, type] of ADDED_COLUMNS) {
-    if (!there.has(`${table}.${column}`)) await sql.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} ${type}`);
-  }
-  if (!there.has(RUNS_INDEX)) await sql.query(`CREATE INDEX IF NOT EXISTS ${RUNS_INDEX} ON ${RUNS} (slug, created_at DESC)`);
-  // Saved values from before they kept their variable's label get it once, from the harness as it is now. One whose
-  // variable is gone keeps none, and is not used again.
-  await sql.query(
-    `UPDATE ${VALUES} vv SET label = var->>'label'
-     FROM ${VERSIONS} v, jsonb_array_elements(CASE WHEN jsonb_typeof(v.content->'variables') = 'array' THEN v.content->'variables' ELSE '[]'::jsonb END) var
-     WHERE vv.label IS NULL AND v.slug = vv.slug AND v.number = (SELECT max(number) FROM ${VERSIONS} WHERE slug = vv.slug) AND var->>'key' = vv.key`,
-  );
-  // Each built-in harness is added once, as version 1, if its slug is not there yet.
-  // ON CONFLICT makes two instances starting together harmless.
-  const builtIns = builtInHarnesses();
-  const slugs = builtIns.map((b) => b.slug);
-  const have = new Set(
-    ((await sql.query(`SELECT slug FROM ${HARNESSES} WHERE slug = ANY($1::text[])`, [slugs])) as Row[]).map((r) => String(r.slug)),
-  );
-  for (const b of builtIns) {
-    if (have.has(b.slug)) continue;
-    // A Hub starts with its harnesses already built from pieces: one per part, made for that harness.
-    // Two instances starting together: the second fails on the slug and setUp is run again, which finds it done.
-    const fields: Fields = { kind: "harness", name: b.name, goal: b.goal, description: b.description, content: contentOf(b.content) };
-    const plan = await planPieces(b.slug, fields);
-    const built = typeof plan === "string" ? { fields, planned: [] } : plan;
-    await sql.transaction([
-      sql.query(`INSERT INTO ${HARNESSES} (slug, owner_email, owner_name) VALUES ($1, $2, $3)`, [b.slug, b.owner.email, b.owner.name]),
-      ...pieceStatements(sql, b.slug, b.owner, b.owner, built.planned),
-      sql.query(
-        `INSERT INTO ${VERSIONS} (slug, number, name, goal, description, note, content, saved_by_email, saved_by_name)
-         VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8)`,
-        [b.slug, b.name, b.goal, b.description, b.note, JSON.stringify(built.fields.content), b.owner.email, b.owner.name],
-      ),
-    ]);
-  }
-  // A built-in harness saved before goals had their own field states its goal
-  // in its prompt. That sentence fills the new field once, for the versions
-  // (and open suggestions) that predate it; anything saved since is left alone.
-  for (const b of builtIns) {
-    if (!have.has(b.slug) || !b.goal) continue;
-    // Only the harness the Hub itself seeded: someone else's harness at this slug is left alone.
-    const seeded = `EXISTS (SELECT 1 FROM ${HARNESSES} h WHERE h.slug = $1 AND h.owner_email = $4)`;
-    await sql.query(`UPDATE ${VERSIONS} SET goal = $2 WHERE slug = $1 AND goal = '' AND saved_at < $3::timestamptz AND ${seeded}`, [
-      b.slug,
-      b.goal,
-      GOAL_ADDED,
-      b.owner.email,
-    ]);
-    await sql.query(
-      `UPDATE ${SUGGESTIONS} SET proposed = jsonb_set(proposed, '{goal}', to_jsonb($2::text))
-       WHERE slug = $1 AND NOT (proposed ? 'goal') AND created_at < $3::timestamptz AND ${seeded}`,
-      [b.slug, b.goal, GOAL_ADDED, b.owner.email],
-    );
-  }
-  await labelOldVersions(sql).catch((error) => console.error(JSON.stringify({ at: "store", why: "labelling old versions failed", message: String(error) })));
-  // Two one-time moves for a Hub that predates pieces. Neither may stop the Hub from starting.
-  await moveOldTeamMemory().catch((error) => console.error(JSON.stringify({ at: "store", why: "moving old team memory failed", message: String(error) })));
-  await convertOldParts().catch((error) => console.error(JSON.stringify({ at: "store", why: "making pieces failed", message: String(error) })));
-}
-
-/**
- * A shared memory saved before notes existed was team memory as a whole:
- * anyone could add lines to its text, and it was read as notes. Its lines
- * become its team notes, in a new version, and its text one neutral line.
- * Moving them can only lower what they are trusted for, never raise it.
- */
-async function moveOldTeamMemory(): Promise<void> {
-  const rows = (await db().query(`${VIEW} WHERE ${LATEST} AND h.kind = 'memory' AND NOT (v.content ? 'notes') LIMIT 25`)) as Row[];
-  for (const piece of rows.map(toView)) {
-    const next: Fields = { ...piece, goal: "", content: { ...piece.content, prompt: "Notes that runs leave for the team.", notes: piece.content.prompt } };
-    await insertVersion(piece.slug, next, "Its lines are now team notes, kept apart from its text.", piece.owner, NOTES_ONLY, piece.latest);
-  }
-}
-
-/** What is recorded as the change of the one version in which a harness's parts became pieces. The Versions page reads it. */
-export const PARTS_BECAME_PIECES = "parts became pieces";
-
-/**
- * Harnesses saved before every part was a piece hold their parts' text inside
- * them. Each gets its pieces once: one per part, made for that harness and
- * owned by its owner, and one new version that links them. No text changes.
  *
- * So each piece is dated like its own text: the oldest version, walking back
- * from the latest, in which that part already said what it says. Nobody is
- * then told that a piece changed when it only moved. And each is signed by
- * the harness's owner: before pieces, everything in a harness counted as its
- * owner's text, whoever had saved the last version.
- * A harness that cannot be converted is left as it is and logged.
+ * This file saves, edits and suggests. The rest of the store sits next to it:
+ * db.ts (tables and connection), setup.ts (getting the database ready),
+ * read.ts (reading items and versions) and slugs.ts (slugs made from names).
+ * Setup and this file call each other, and so do setup and read.ts: only from
+ * inside functions, at run time, so the import cycle is safe.
  */
-async function convertOldParts(): Promise<void> {
-  const rows = (await db().query(
-    `${VIEW} WHERE ${LATEST} AND h.kind = 'harness' AND h.archived_at IS NULL
-       AND EXISTS (
-         SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(v.content->'parts') = 'array' THEN v.content->'parts' ELSE '[]'::jsonb END) part
-         WHERE NOT (part ? 'piece') AND btrim(coalesce(part->>'body', '')) <> ''
-       )
-     LIMIT 25`,
-  )) as Row[];
-  for (const h of rows.map(toView)) {
-    try {
-      const plan = await planPieces(h.slug, h, h);
-      if (typeof plan === "string" || plan.planned.length === 0) continue;
-      const dates = await textDates(h);
-      const sql = db();
-      await sql.transaction([
-        ...pieceStatements(sql, h.slug, h.owner, h.owner, plan.planned.map((p) => ({ ...p, at: dates.get(p.name) ?? h.savedAt })), h.visibility),
-        insertVersionOrFail(h.slug, plan.fields, "Its parts became pieces of their own. No text changed.", h.owner, PARTS_BECAME_PIECES, h.latest),
-      ]);
-    } catch (error) {
-      // Another instance converting the same harness at the same moment is not a failure.
-      if (!lostRace(error)) console.error(JSON.stringify({ at: "store", why: "making pieces failed", slug: h.slug, message: String(error) }));
-    }
-  }
-}
-
-/**
- * When the text of each part of a harness from before pieces got to be what
- * it is: the date of the oldest version, walking back from the latest, in
- * which the part of that name already had this text.
- */
-async function textDates(h: HarnessView): Promise<Map<string, string>> {
-  const rows = (await db().query(`SELECT saved_at, content FROM ${VERSIONS} WHERE slug = $1 AND number <= $2::int ORDER BY number DESC LIMIT 200`, [h.slug, h.version])) as Row[];
-  const dates = new Map<string, string>();
-  for (const part of h.content.parts) {
-    if (part.piece) continue;
-    for (const r of rows) {
-      const then = contentOf(r.content).parts.find((p) => !p.piece && p.name === part.name);
-      if (!then || then.body !== part.body) break;
-      dates.set(part.name, new Date(r.saved_at as string).toISOString());
-    }
-  }
-  return dates;
-}
-
-/**
- * Versions saved before the Hub recorded what each one changed get that line
- * once, worked out from their text. After that this finds nothing to do.
- */
-async function labelOldVersions(sql: Sql): Promise<void> {
-  const rows = (await sql.query(
-    `SELECT v.slug, v.number, v.name, v.goal, v.description, v.content,
-            p.name AS p_name, p.goal AS p_goal, p.description AS p_description, p.content AS p_content
-     FROM ${VERSIONS} v JOIN ${VERSIONS} p ON p.slug = v.slug AND p.number = v.number - 1
-     WHERE v.changes IS NULL LIMIT 50`,
-  )) as Row[];
-  for (const r of rows) {
-    const before = { name: String(r.p_name), goal: String(r.p_goal ?? ""), description: String(r.p_description), content: contentOf(r.p_content) };
-    const after = { name: String(r.name), goal: String(r.goal ?? ""), description: String(r.description), content: contentOf(r.content) };
-    await sql.query(`UPDATE ${VERSIONS} SET changes = $3 WHERE slug = $1 AND number = $2 AND changes IS NULL`, [
-      r.slug,
-      r.number,
-      describeChanges(before, after).join(", ") || "nothing",
-    ]);
-  }
-}
-
-/** What is recorded as the change of a version that has the text of the one before, saved again by someone who can change the piece. */
-const TAKEN_OVER = "text taken over, unchanged";
-
-/** What is recorded as the change of a version that only touched a memory's team notes: a line added, or notes turned on or off. */
-const NOTES_ONLY = "team notes";
-
-/**
- * The newest version, up to the one read, in which one thing about an item got to be what it is: who saved it,
- * when, with what note. The first version set everything, and so does a version that takes a text over as it stands.
- * It is how the Hub knows whose words a text, a name or a timing are, whoever saved the item since.
- */
-const lastSet = (changed: string) => `
-         (SELECT json_build_object('email', t.saved_by_email, 'name', t.saved_by_name, 'at', t.saved_at, 'note', t.note, 'number', t.number)
-            FROM ${VERSIONS} t LEFT JOIN ${VERSIONS} p ON p.slug = t.slug AND p.number = t.number - 1
-            WHERE t.slug = h.slug AND t.number <= v.number AND (p.number IS NULL OR t.changes LIKE '%${TAKEN_OVER}%' OR ${changed})
-            ORDER BY t.number DESC LIMIT 1)`;
-
-const VIEW = `
-  SELECT h.slug, h.kind, h.owner_email, h.owner_name, h.copied_from, h.archived_at, h.made_for, h.visibility,
-         v.number, v.name, v.goal, v.description, v.note, v.content, v.saved_by_email, v.saved_by_name, v.saved_at,
-         (SELECT max(number) FROM ${VERSIONS} WHERE slug = h.slug) AS latest,
-         ${lastSet("t.content->>'prompt' IS DISTINCT FROM p.content->>'prompt'")} AS text_version,
-         ${lastSet("t.name IS DISTINCT FROM p.name")} AS name_version,
-         CASE WHEN h.kind = 'hook' THEN ${lastSet("t.content->>'when' IS DISTINCT FROM p.content->>'when'")} END AS when_version,
-         (SELECT count(*)::int FROM ${SUGGESTIONS} WHERE slug = h.slug AND status = 'open') AS open_suggestions,
-         (SELECT coalesce(json_agg(json_build_object('email', r.email, 'name', r.name) ORDER BY r.added_at), '[]'::json)
-            FROM ${ROLES} r WHERE r.slug = h.slug) AS editors,
-         (SELECT coalesce(json_agg(json_build_object('email', p.email, 'name', p.name)), '[]'::json)
-            FROM (SELECT m.owner_email AS email, m.owner_name AS name FROM ${HARNESSES} m WHERE m.slug = h.made_for
-                  UNION ALL
-                  SELECT r.email, r.name FROM ${ROLES} r WHERE r.slug = h.made_for) p) AS home_people,
-         (SELECT count(*)::int FROM ${RUNS} WHERE slug = h.slug) AS runs,
-         (SELECT count(*)::int FROM ${RUNS} WHERE slug = h.slug AND status = 'ok') AS clean_runs,
-         (SELECT max(created_at) FROM ${RUNS} WHERE slug = h.slug) AS last_run
-  FROM ${HARNESSES} h JOIN ${VERSIONS} v ON v.slug = h.slug`;
-
-const LATEST = `v.number = (SELECT max(number) FROM ${VERSIONS} WHERE slug = h.slug)`;
-
-const KINDS: ItemKind[] = ["harness", "skill", "tool", "hook", "memory"];
-
-const peopleOf = (list: unknown): Person[] => ((list ?? []) as Person[]).map((e) => ({ email: String(e.email), name: String(e.name) }));
-
-function toView(r: Row): HarnessView {
-  const kind = String(r.kind ?? "harness") as ItemKind;
-  const ownEditors = peopleOf(r.editors);
-  // A piece made for a harness can be changed by whoever can change that harness: its owner and its editors.
-  const editors = [...ownEditors];
-  for (const person of peopleOf(r.home_people)) {
-    if (person.email !== String(r.owner_email) && !editors.some((e) => e.email === person.email)) editors.push(person);
-  }
-  const savedAt = new Date(r.saved_at as string).toISOString();
-  const savedBy = { email: String(r.saved_by_email), name: String(r.saved_by_name) };
-  // The version in which one thing about it got to be what it is: who saved it, when, with what note. Failing that, this one.
-  const setAt = (raw: unknown) => {
-    const set = (raw ?? null) as { email: string; name: string; at: string; note: string; number: number } | null;
-    return set
-      ? { by: { email: String(set.email), name: String(set.name) }, at: new Date(set.at).toISOString(), note: String(set.note), version: Number(set.number) }
-      : { by: savedBy, at: savedAt, note: String(r.note), version: Number(r.number) };
-  };
-  const text = setAt(r.text_version);
-  const named = setAt(r.name_version);
-  // Only a hook says when it applies. Anything else has no timing for anyone to have set: it goes with the text.
-  const timed = kind === "hook" ? setAt(r.when_version) : text;
-  return {
-    slug: String(r.slug),
-    kind: KINDS.includes(kind) ? kind : "harness",
-    name: String(r.name),
-    goal: String(r.goal ?? ""),
-    description: String(r.description),
-    owner: { email: String(r.owner_email), name: String(r.owner_name) },
-    editors,
-    ownEditors,
-    madeFor: r.made_for ? String(r.made_for) : null,
-    visibility: visibilityOf(r.visibility),
-    version: Number(r.number),
-    latest: Number(r.latest),
-    note: String(r.note),
-    savedAt,
-    savedBy,
-    text: { ...text, nameBy: named.by, whenBy: timed.by },
-    lastChange: lastChangeOf(text, named, timed),
-    copiedFrom: r.copied_from ? String(r.copied_from) : null,
-    openSuggestions: Number(r.open_suggestions ?? 0),
-    archived: Boolean(r.archived_at),
-    runs: Number(r.runs ?? 0),
-    cleanRuns: Number(r.clean_runs ?? 0),
-    lastRunAt: r.last_run ? new Date(r.last_run as string).toISOString() : null,
-    content: contentOf(r.content),
-  };
-}
-
-/**
- * An agent reads three things of a piece: its text, its name and when it applies. Given the version in which each
- * got to be what it is, this is the newest of them: the piece's last change. When several were set in one version,
- * they are the same version, and the text's record stands for it.
- */
-export function lastChangeOf<T extends { version: number }>(text: T, named: T, timed: T): T {
-  return [named, timed].reduce((newest, set) => (set.version > newest.version ? set : newest), text);
-}
 
 /** Who may change an item directly: its owner and its editors. For a piece made for a harness, also whoever can change that harness. */
 export function canEdit(h: Pick<HarnessView, "owner" | "editors">, member: Member): boolean {
   return h.owner.email === member.email || h.editors.some((e) => e.email === member.email);
-}
-
-/** Who last set what an agent reads of a piece: its text, its name, when it applies. */
-const writersOf = (piece: HarnessView): Person[] => [piece.text.by, piece.text.nameBy, piece.text.whenBy];
-
-/** A piece as a part of a harness. */
-export function partOf(piece: HarnessView): Part {
-  return {
-    kind: piece.kind as PartKind,
-    name: piece.name,
-    summary: piece.description || undefined,
-    body: piece.content.prompt,
-    when: piece.content.when,
-    icon: piece.content.icon,
-    piece: piece.slug,
-    by: piece.owner,
-    pieceVersion: piece.version,
-    // Who saved the text as it stands, and when: a line of team notes added since is not a change to it.
-    savedBy: piece.text.by,
-    pieceSavedAt: piece.text.at,
-    pieceNote: piece.text.note,
-    textVersion: piece.text.version,
-    // The newest change to anything an agent reads of it: its text, its name, or when it applies.
-    pieceChange: piece.lastChange,
-    madeFor: piece.madeFor,
-    pieceSuggestions: piece.openSuggestions,
-    ...(typeof piece.content.notes === "string" ? { notes: piece.content.notes } : {}),
-  };
-}
-
-/**
- * Puts each piece, as it is now, into the part that points at it: its text,
- * and its name. A part is its piece, so when the piece is renamed the part
- * reads the new name everywhere. The name stored with the link stays what it
- * was: it is only how the harness tells its parts apart when two versions are
- * compared or a suggestion is merged.
- *
- * It also says whose words each piece is. A piece counts as the harness
- * owner's own only when nobody can change it who could not change the harness
- * itself, and what an agent reads of it was each last set by someone who can:
- * its text, and the two things its heading prints, its name and when it
- * applies. An editor who was let go since still wrote what they wrote.
- * Anything else is a teammate's piece that the owner chose to use.
- */
-function resolveLinks(h: HarnessView, pieces: Map<string, HarnessView>): HarnessView {
-  if (h.kind !== "harness" || !h.content.parts.some((p) => p.piece)) return h;
-  const here = new Set([h.owner.email, ...h.editors.map((e) => e.email)]);
-  const parts = h.content.parts.map((p) => {
-    if (!p.piece) return p;
-    const piece = pieces.get(p.piece);
-    if (!piece) return { ...p, summary: "This piece could not be found.", body: "" };
-    const outsiders = [piece.owner, ...piece.editors].filter((person) => !here.has(person.email));
-    // Whoever last set its text, its name or its timing without being able to change this harness: their words are in it.
-    const stranger = writersOf(piece).find((person) => !here.has(person.email));
-    return { ...partOf(piece), ...(stranger ? { stranger } : {}), ownText: outsiders.length === 0 && !stranger, ...(outsiders.length ? { outsiders } : {}) };
-  });
-  return { ...h, content: { ...h.content, parts } };
-}
-
-/**
- * An item as this person may read it: whatever points at something they cannot see says nothing about it. The
- * harness a piece was made for and the people who edit it, the item a copy was made from, and in a harness, the
- * name of a piece they cannot see.
- */
-/** What a piece this person cannot see is called, wherever its name would stand. */
-export const PRIVATE_PIECE = "a private piece";
-
-function maskedFor(x: HarnessView, sees: (slug: string) => boolean, hidden: Set<string>): HarnessView {
-  const home = x.madeFor !== null && !sees(x.madeFor);
-  const original = x.copiedFrom !== null && !sees(x.copiedFrom);
-  const parts = x.content.parts.some((p) => p.piece && hidden.has(p.piece))
-    ? x.content.parts.map((p) =>
-        p.piece && hidden.has(p.piece) ? { ...p, name: PRIVATE_PIECE, summary: "This piece is private: only its owner and its editors can read it.", body: "", hidden: true } : p,
-      )
-    : x.content.parts;
-  if (!home && !original && parts === x.content.parts) return x;
-  return {
-    ...x,
-    ...(home ? { madeFor: null, editors: x.ownEditors } : {}),
-    ...(original ? { copiedFrom: null } : {}),
-    content: { ...x.content, parts },
-  };
-}
-
-export type Everything = {
-  /** Every harness, in its latest version, with the text of its pieces filled in. Newest first. */
-  harnesses: HarnessView[];
-  /** Every piece, in its latest version. */
-  pieces: HarnessView[];
-};
-
-/**
- * Everything the Hub holds that is not archived, as this person sees it: a private item they cannot see is left out,
- * and a piece they cannot see fills no harness they read. `null` is the Hub itself, which sees everything.
- */
-export async function everything(viewer: Member | null): Promise<Everything> {
-  await ensureReady();
-  const stored = ((await db().query(`${VIEW} WHERE ${LATEST} ORDER BY v.saved_at DESC`)) as Row[]).map(toView);
-  const bySlug = new Map(stored.map((x) => [x.slug, x]));
-  const sees = (slug: string) => {
-    const x = bySlug.get(slug);
-    return x === undefined || canSee(x, viewer);
-  };
-  const hidden = new Set(stored.filter((x) => x.kind !== "harness" && !canSee(x, viewer)).map((x) => x.slug));
-  const all = stored.filter((x) => canSee(x, viewer));
-  // An archived piece still fills the harnesses that use it; it only leaves the lists.
-  const pieces = new Map(all.filter((x) => x.kind !== "harness").map((x) => [x.slug, x]));
-  return {
-    harnesses: all.filter((x) => x.kind === "harness" && !x.archived).map((h) => maskedFor(resolveLinks(h, pieces), sees, hidden)),
-    pieces: all.filter((x) => x.kind !== "harness" && !x.archived).map((p) => maskedFor(p, sees, hidden)),
-  };
-}
-
-/** Every harness this person sees, each in its latest version, newest first. */
-export async function allHarnesses(viewer: Member | null): Promise<HarnessView[]> {
-  return (await everything(viewer)).harnesses;
-}
-
-/** What a person has archived, so they can bring it back. */
-export async function archivedBy(member: Member): Promise<HarnessView[]> {
-  await ensureReady();
-  const rows = (await db().query(`${VIEW} WHERE ${LATEST} AND h.archived_at IS NOT NULL AND h.owner_email = $1 ORDER BY h.archived_at DESC`, [
-    member.email,
-  ])) as Row[];
-  return rows.map(toView);
-}
-
-/** Numbers that come from a person are checked before they reach the database's integer columns. */
-const isCount = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= 1_000_000_000;
-
-/** An item as stored: a part that is a shared piece holds the link, not the piece's text. */
-async function findStored(slug: string, version?: number): Promise<HarnessView | undefined> {
-  const wanted = slug.trim().toLowerCase();
-  if (!SLUG.test(wanted)) return undefined;
-  if (version !== undefined && !isCount(version)) return undefined;
-  await ensureReady();
-  const rows = (
-    version === undefined
-      ? await db().query(`${VIEW} WHERE h.slug = $1 ORDER BY v.number DESC LIMIT 1`, [wanted])
-      : await db().query(`${VIEW} WHERE h.slug = $1 AND v.number = $2`, [wanted, version])
-  ) as Row[];
-  return rows[0] ? toView(rows[0]) : undefined;
-}
-
-async function piecesBySlug(slugs: string[]): Promise<Map<string, HarnessView>> {
-  if (slugs.length === 0) return new Map();
-  const rows = (await db().query(`${VIEW} WHERE h.slug = ANY($1::text[]) AND h.kind <> 'harness' AND ${LATEST}`, [slugs])) as Row[];
-  return new Map(rows.map(toView).map((p) => [p.slug, p]));
-}
-
-/**
- * A harness or a shared piece by slug: its latest version, or a specific one.
- * Shared pieces a harness uses are filled in with their current text, whatever
- * version of the harness was asked for.
- *
- * As this person sees it: a private item they cannot see is not there for them,
- * and a piece they cannot see fills no part. `null` is the Hub itself.
- */
-export async function findHarness(viewer: Member | null, slug: string, version?: number): Promise<HarnessView | undefined> {
-  const h = await findStored(slug, version);
-  if (!h || !canSee(h, viewer)) return undefined;
-  // What it points at: the harness it was made for, the item it copies. Looked up only to know whether to say so.
-  const pointed = await Promise.all([h.madeFor, h.copiedFrom].map((s) => (s ? findStored(s) : Promise.resolve(undefined))));
-  const blind = new Set(pointed.filter((x): x is HarnessView => x !== undefined && !canSee(x, viewer)).map((x) => x.slug));
-  const sees = (s: string) => !blind.has(s);
-  const linked = h.kind === "harness" ? [...new Set(h.content.parts.map((p) => p.piece).filter((s): s is string => Boolean(s)))] : [];
-  if (!linked.length) return maskedFor(h, sees, new Set());
-  const pieces = await piecesBySlug(linked);
-  const hidden = new Set<string>();
-  for (const [slug, piece] of pieces) {
-    if (!canSee(piece, viewer)) {
-      pieces.delete(slug);
-      hidden.add(slug);
-    }
-  }
-  return maskedFor(resolveLinks(h, pieces), sees, hidden);
-}
-
-/**
- * An item's history, newest first: at most `limit` versions, since a team
- * memory gets one for every line added. With `withText`, that many of the
- * newest also carry their text, so each can be compared with the one before.
- */
-export async function versionsOf(slug: string, withText = 0, limit = 200): Promise<VersionLine[]> {
-  if (!SLUG.test(slug)) return [];
-  await ensureReady();
-  const rows = (await db().query(
-    `SELECT number, note, changes, saved_by_email, saved_by_name, saved_at,
-            CASE WHEN number > newest - $2::int THEN name END AS name,
-            CASE WHEN number > newest - $2::int THEN goal END AS goal,
-            CASE WHEN number > newest - $2::int THEN description END AS description,
-            CASE WHEN number > newest - $2::int THEN content END AS content
-     FROM ${VERSIONS}, (SELECT max(number) AS newest FROM ${VERSIONS} WHERE slug = $1) n
-     WHERE slug = $1 ORDER BY number DESC LIMIT $3::int`,
-    [slug, withText, limit],
-  )) as Row[];
-  return rows.map((r) => ({
-    number: Number(r.number),
-    note: String(r.note),
-    changes: r.changes ? String(r.changes) : Number(r.number) === 1 ? "first version" : "",
-    savedBy: { email: String(r.saved_by_email), name: String(r.saved_by_name) },
-    savedAt: new Date(r.saved_at as string).toISOString(),
-    fields: r.content
-      ? { name: String(r.name), goal: String(r.goal ?? ""), description: String(r.description), content: contentOf(r.content) }
-      : undefined,
-  }));
-}
-
-/** A few versions by number, as stored: a part that is a shared piece is the link, not the piece's text. */
-export async function versionFields(slug: string, numbers: number[]): Promise<Map<number, Fields>> {
-  const wanted = [...new Set(numbers)].filter(isCount);
-  if (!SLUG.test(slug) || wanted.length === 0) return new Map();
-  await ensureReady();
-  const rows = (await db().query(`SELECT number, name, goal, description, content FROM ${VERSIONS} WHERE slug = $1 AND number = ANY($2::int[])`, [
-    slug,
-    wanted,
-  ])) as Row[];
-  return new Map(
-    rows.map((r) => [Number(r.number), { name: String(r.name), goal: String(r.goal ?? ""), description: String(r.description), content: contentOf(r.content) }]),
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1172,23 +497,6 @@ async function settleLinks(
 }
 
 /**
- * How much of a harness's slug leads the slugs of the pieces made for it. A
- * slug holds 80 characters: a harness with a very long one keeps this much of
- * it, so that the part's own name always fits behind.
- */
-const headOf = (harness: string) => harness.slice(0, 52).replace(/-+$/, "");
-
-/** The slug of a piece made for a harness: the harness's own slug, then the part's name. */
-export function madeSlug(harness: string, name: string, taken: Set<string>): string | null {
-  const stem = `${headOf(harness)}-${slugOf(name)}`.slice(0, 76).replace(/-+$/, "");
-  for (let n = 1; n <= 30; n++) {
-    const slug = n === 1 ? stem : `${stem}-${n}`;
-    if (SLUG.test(slug) && !taken.has(slug)) return slug;
-  }
-  return null;
-}
-
-/**
  * Every part is a piece. Text that arrives inside a harness (pasted with a
  * save, written on its page, or left there by a version from before pieces)
  * is made into a piece for that harness, and the harness keeps the link.
@@ -1203,7 +511,7 @@ export function madeSlug(harness: string, name: string, taken: Set<string>): str
  * is let in at its length, new text keeps to the limit of a piece. `copies`
  * names the parts that are the harness's own copy of an existing piece.
  */
-async function planPieces(harness: string, f: Fields, had?: Fields, copies?: Map<string, CopyOf>): Promise<{ fields: Fields; planned: Planned[] } | string> {
+export async function planPieces(harness: string, f: Fields, had?: Fields, copies?: Map<string, CopyOf>): Promise<{ fields: Fields; planned: Planned[] } | string> {
   if (!f.content.parts.some((p) => !p.piece && p.body.trim())) return { fields: f, planned: [] };
   // Slugs have no character that means anything to LIKE, so the start of the harness's slug can be used as it is.
   const taken = new Set(((await db().query(`SELECT slug FROM ${HARNESSES} WHERE slug LIKE $1`, [`${headOf(harness)}-%`])) as Row[]).map((r) => String(r.slug)));
@@ -1252,7 +560,7 @@ async function planPieces(harness: string, f: Fields, had?: Fields, copies?: Map
  * as the harness version that links them. A piece made for a harness belongs
  * to that harness's owner, whoever is saving: an editor never walks away with it.
  */
-function pieceStatements(sql: Sql, harness: string, owner: Person, by: Member, planned: Planned[], visibility: Visibility = "team") {
+export function pieceStatements(sql: Sql, harness: string, owner: Person, by: Member, planned: Planned[], visibility: Visibility = "team") {
   // A piece made for a harness is seen by whoever sees the harness: a team harness's pieces are team pieces.
   return planned.flatMap((p) => [
     sql.query(`INSERT INTO ${HARNESSES} (slug, owner_email, owner_name, kind, made_for, copied_from, visibility) VALUES ($1, $2, $3, $4, $5, $6, $7)`, [
@@ -1349,7 +657,7 @@ async function nowPastLimit(piece: HarnessView, viewer: Member | null): Promise<
  * never quietly undo one that landed a moment before it. The number is worked
  * out in the same statement, and the primary key refuses a duplicate.
  */
-function insertVersion(slug: string, f: Fields, note: string, by: Member, changes: string, onTopOf: number) {
+export function insertVersion(slug: string, f: Fields, note: string, by: Member, changes: string, onTopOf: number) {
   return db().query(
     `INSERT INTO ${VERSIONS} (slug, number, name, description, note, content, saved_by_email, saved_by_name, changes, goal)
      SELECT $1, COALESCE(max(number), 0) + 1, $2, $3, $4, $5::jsonb, $6, $7, $8, $10
@@ -1366,7 +674,7 @@ function insertVersion(slug: string, f: Fields, note: string, by: Member, change
  * fails (a division by zero) instead of inserting nothing, so everything
  * written with it is undone and nothing is left half made.
  */
-function insertVersionOrFail(slug: string, f: Fields, note: string, by: Member, changes: string, onTopOf: number) {
+export function insertVersionOrFail(slug: string, f: Fields, note: string, by: Member, changes: string, onTopOf: number) {
   return db().query(
     `WITH added AS (
        INSERT INTO ${VERSIONS} (slug, number, name, description, note, content, saved_by_email, saved_by_name, changes, goal)
@@ -1384,7 +692,7 @@ function insertVersionOrFail(slug: string, f: Fields, note: string, by: Member, 
 const isDuplicate = (error: unknown) => (error as { code?: string } | null)?.code === "23505";
 
 /** A save that came second: its slug or version number was taken, or the version it was written on is no longer the latest. */
-const lostRace = (error: unknown) => ["23505", "22012", "40001"].includes((error as { code?: string } | null)?.code ?? "");
+export const lostRace = (error: unknown) => ["23505", "22012", "40001"].includes((error as { code?: string } | null)?.code ?? "");
 
 /** Writes that touch who sees what run serializable: two that each checked the other's rows cannot both land. */
 const SERIALIZABLE = { isolationLevel: "Serializable" } as const;
@@ -1884,13 +1192,6 @@ async function textForPieces(
   };
 }
 
-/** The name each of these pieces has now, by slug. */
-export async function pieceNames(slugs: string[], viewer: Member | null): Promise<Map<string, string>> {
-  const pieces = await piecesBySlug([...new Set(slugs)].filter((slug) => SLUG.test(slug)));
-  // A piece this person cannot see is called that, never by the name it had when a version stored it.
-  return new Map([...pieces].map(([slug, piece]) => [slug, canSee(piece, viewer) ? piece.name : PRIVATE_PIECE]));
-}
-
 /**
  * What changed, in words. A part that was taken out is named the way people
  * read it: by the name its piece has now, which may no longer be the name
@@ -1901,19 +1202,6 @@ async function described(before: Fields, after: Fields, viewer: Member | null): 
   const gone = linksOf(before.content.parts).filter((slug) => !stays.has(slug));
   // A piece the saver cannot see is named by its slug: its name would stay in the version's record for everyone.
   return describeChanges(gone.length ? withNames(before, await pieceNames(gone, viewer)) : before, after);
-}
-
-/** A slug made from a name: "Inbox notes" gives "inbox-notes". */
-export function slugOf(name: string): string {
-  const slug = name
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60)
-    .replace(/-+$/, "");
-  return slug || "piece";
 }
 
 /**

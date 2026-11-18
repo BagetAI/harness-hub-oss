@@ -10,7 +10,7 @@ person's own tools.
 
 ## Where it stands
 
-Everything lives in a Neon Postgres database (`lib/hub/harnesses.ts`). Every save is a new version;
+Everything lives in a Neon Postgres database (`lib/hub/db.ts`). Every save is a new version;
 versions are never edited or deleted, and runs use the latest. A Hub starts with one built-in
 harness (`lib/hub/built-in.ts`), added once as version 1 if its slug is not there yet: the Morning
 inbox brief, a small read-only example with one skill, one tool, two hooks and one memory. Built-in
@@ -174,7 +174,7 @@ harness, and any harness can use any piece.
 | Token check | `lib/mcp-auth.ts` | Verifies Claude's access token with Clerk, for this exact connector address, then maps it to a person. |
 | Sign-in metadata | `app/.well-known/oauth-protected-resource/…` | Tells Claude which sign-in server to use. The connector's `401` points here. |
 | Who is let in | `lib/hub/members.ts`, `lib/hub/clerk.ts` | A person is their primary, verified email. `ALLOWED_EMAILS` lists the exact addresses allowed. |
-| Store | `lib/hub/harnesses.ts` | The one place items are read and saved. Tables `harnesses` (harnesses and pieces, by `kind`; a piece made for a harness names it in `made_for`), `versions`, `suggestions`, `roles` (editors), `runs`, `members` and `agents` (what each connected agent may do), created on first use. A save or a merge lands only on top of the version it was worked out from, and the pieces a save makes are written in the same transaction as the harness version that links them. |
+| Store | `lib/hub/harnesses.ts` (saving, editing, suggestions), `read.ts` (reading items and versions), `setup.ts` (tables, built-in harnesses, one-time moves of old data), `db.ts` (tables and connection), `slugs.ts` | The one place items are read and saved. Tables `harnesses` (harnesses and pieces, by `kind`; a piece made for a harness names it in `made_for`), `versions`, `suggestions`, `roles` (editors), `runs`, `members` and `agents` (what each connected agent may do), created on first use. A save or a merge lands only on top of the version it was worked out from, and the pieces a save makes are written in the same transaction as the harness version that links them. |
 | Runs and people | `lib/hub/runs.ts`, `lib/hub/people.ts` | What agents report about runs, with the numbers for the Stats page; and the people admins added from the Hub. |
 | Changes | `lib/hub/diff.ts` | Compares two versions field by field, shows the changed lines, and merges a suggestion onto the latest version when nothing it touches changed since. |
 | Built-in harnesses | `lib/hub/built-in.ts`, `lib/hub/routines/` | What a Hub starts with. |

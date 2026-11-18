@@ -2,18 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import {
-  canEdit,
-  findHarness,
-  reviewSuggestion,
-  saveHarness,
-  setArchived,
-  setEditor,
-  setVisibility,
-  slugOf,
-  suggestChange,
-  type Edit,
-} from "@/lib/hub/harnesses";
+import { canEdit, reviewSuggestion, saveHarness, setArchived, setEditor, setVisibility, suggestChange, type Edit } from "@/lib/hub/harnesses";
+import { findHarness } from "@/lib/hub/read";
+import { slugOf } from "@/lib/hub/slugs";
 import type { Member } from "@/lib/hub/members";
 import { setAccess } from "@/lib/hub/agents";
 import { saveValues } from "@/lib/hub/values";

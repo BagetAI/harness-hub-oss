@@ -1,4 +1,4 @@
-import { db } from "@/lib/hub/harnesses";
+import { db } from "@/lib/hub/db";
 
 export const dynamic = "force-dynamic";
 

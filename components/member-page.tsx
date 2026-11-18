@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Shell, type Section } from "@/components/shell";
 import type { Member } from "@/lib/hub/members";
 import { session } from "@/lib/hub/session";
-import { everything } from "@/lib/hub/harnesses";
+import { everything } from "@/lib/hub/read";
 import { libraryCounts } from "@/lib/hub/library";
 import { isAdmin } from "@/lib/hub/people";
 import type { HarnessView } from "@/lib/hub/types";
