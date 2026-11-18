@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { saveEdit } from "@/app/h/[slug]/actions";
-import { ICON_OPTIONS, WHEN_OPTIONS, type Mode } from "@/components/forms";
+import { ICON_OPTIONS, WHEN_OPTIONS, type Mode } from "@/components/form-parts";
 import { useSaved } from "@/components/use-saved";
 import type { Part } from "@/lib/hub/types";
 

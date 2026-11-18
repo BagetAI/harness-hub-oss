@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { CopyButton } from "@/components/copy-button";
-import { AgentAccessForm } from "@/components/forms";
+import { AgentAccessForm } from "@/components/people-forms";
 import { MemberPage } from "@/components/member-page";
 import { agentsOf, type Agent } from "@/lib/hub/agents";
 import { mcpUrl } from "@/lib/hub/config";

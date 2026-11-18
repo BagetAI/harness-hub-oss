@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { NewForm } from "@/components/forms";
+import { NewForm } from "@/components/new-form";
 import { MemberPage } from "@/components/member-page";
 import type { ItemKind } from "@/lib/hub/types";
 

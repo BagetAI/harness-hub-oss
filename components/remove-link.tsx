@@ -1,7 +1,7 @@
 "use client";
 
 import { saveEdit } from "@/app/h/[slug]/actions";
-import type { Mode } from "@/components/forms";
+import type { Mode } from "@/components/form-parts";
 import { useSaved } from "@/components/use-saved";
 
 /** Takes one part out of a harness, as a new version, or suggests it to the owner. The piece itself stays in the library. */

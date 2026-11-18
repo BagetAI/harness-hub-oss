@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AddPersonForm, RemovePersonForm } from "@/components/forms";
+import { AddPersonForm, RemovePersonForm } from "@/components/people-forms";
 import { MemberPage } from "@/components/member-page";
 import { allowedDomains, allowedEmails } from "@/lib/hub/members";
 import { addedPeople } from "@/lib/hub/people";
