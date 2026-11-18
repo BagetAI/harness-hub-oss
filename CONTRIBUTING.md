@@ -20,6 +20,22 @@ pnpm dev                     # http://localhost:3210
 You need your own Neon database and Clerk application for the dev server and the store checks.
 Keep `HUB_TABLE_PREFIX=dev_` in `.env.local`, so local data stays in its own tables.
 
+## A map of the code (optional)
+
+[graphify](https://github.com/Graphify-Labs/graphify) turns the repo into a graph you and your
+agent can ask instead of searching files. It needs Python 3.11 or later.
+
+```bash
+pipx install graphifyy        # the CLI
+graphify install              # the /graphify skill for your agent
+graphify hook install         # rebuild the map after each commit
+pnpm graph                    # build it now: graphify-out/graph.html, GRAPH_REPORT.md, graph.json
+```
+
+Then, for example, `graphify explain "lib/hub/harnesses.ts::saveHarness()"` lists what saving a
+harness calls and what calls it. The map stays on your machine: `graphify-out/` is ignored by git.
+[AGENTS.md](AGENTS.md) tells agents to use it when it is there.
+
 ## Checks
 
 | Command | Needs | Runs on pull requests |
