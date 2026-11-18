@@ -1,0 +1,1543 @@
+/*
+ * Harness Hub look, ported from the design mock.
+ * Class names are the mock's own (app, side, main, nav, btn, box ...) so its
+ * screens can be ported one by one without renaming.
+ */
+
+:root {
+  --ink: #0b1b5e;
+  --primary: #1436c4;
+  --flag: #d6249f;
+  --muted: #5a6388;
+  --nav: #2a3670;
+  --border: #e1e5f2;
+  --border-strong: #d3d9ec;
+  --hairline: #eceff8;
+  --hover: #f2f4fb;
+  --tile: #eceff8;
+  --grid-dot: #e6eaf5;
+  --paper: #ffffff;
+  --ok-bg: #e8f5ec;
+  --ok-ink: #1f5b36;
+  --no-bg: #fdecef;
+  --no-ink: #9b1c31;
+  /* The three verdicts of a run. Checked as a set: every pair stays apart for colour-blind readers, each has 3:1 on white. */
+  --run-fine: #5b78dd;
+  --run-look: #d6249f;
+  --run-failed: #9b1c31;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--ink);
+}
+a:hover {
+  color: var(--flag);
+}
+
+/* Shell */
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+/* The mock is square-cornered everywhere, whatever a component asks for. */
+.app * {
+  border-radius: 0 !important;
+}
+.side {
+  flex: 0 0 216px;
+  border-right: 1px solid var(--border);
+  padding: 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.main {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 1180px;
+  padding: 36px 44px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+@media (max-width: 815px) {
+  .app {
+    flex-direction: column;
+  }
+  .side {
+    flex: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .main {
+    flex: 1 1 auto;
+  }
+}
+@media (max-width: 640px) {
+  .main {
+    padding: 28px 16px 40px;
+  }
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Sidebar */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  color: var(--ink);
+}
+.mark {
+  width: 16px;
+  height: 16px;
+  background: var(--primary);
+  flex: none;
+}
+.navlist {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.navh {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0 8px 6px;
+}
+.nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 8px;
+  color: var(--nav);
+  text-decoration: none;
+}
+.nav:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.on {
+  background: var(--hover);
+  color: var(--ink);
+  font-weight: 500;
+}
+.cnt {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+.sidefoot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.navbox {
+  border: 1px solid var(--border);
+}
+/* What is about the team, not the library: smaller, at the bottom with the account */
+.navlist.team {
+  margin-bottom: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+.nav.quiet {
+  min-height: 30px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+/* Text */
+.h1 {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+.h2 {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.mu {
+  color: var(--muted);
+}
+.mono {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.flag {
+  color: var(--flag);
+}
+
+/* Controls */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  background: var(--paper);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.btn:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.pri {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--paper);
+}
+.pri:hover {
+  color: var(--paper);
+}
+.btn:focus-visible,
+.nav:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Blocks */
+.box {
+  border: 1px solid var(--border);
+  background: var(--paper);
+}
+.sec {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.line {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  border-top: 1px solid var(--hairline);
+}
+.kv {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 16px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--hairline);
+}
+.kv:first-child {
+  border-top: 0;
+}
+@media (max-width: 640px) {
+  .kv {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+.copyrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.code {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 13px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--paper);
+  overflow-wrap: anywhere;
+  flex: 1 1 280px;
+  min-width: 0;
+}
+.notice {
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  background: var(--paper);
+}
+.notice.bad {
+  border-color: var(--flag);
+}
+
+
+/* Lists and the harness page */
+.headrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.cols {
+  display: grid;
+  grid-template-columns: 40px minmax(200px, 1.7fr) 110px 110px 130px 140px;
+  gap: 18px;
+  align-items: center;
+  padding: 0 18px;
+}
+.row {
+  min-height: 64px;
+  border-top: 1px solid var(--hairline);
+  text-decoration: none;
+  color: var(--ink);
+}
+.row:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+.namecell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ellipsis {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.prompt {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  background: var(--paper);
+  max-width: 100%;
+}
+
+/* Piece glyphs, as in the mock: square skill, diamond tool, thin bar hook, ring memory. */
+.g {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--ink);
+  flex: none;
+}
+.gt {
+  transform: rotate(45deg) scale(0.82);
+}
+.gh {
+  width: 3px;
+}
+.app .gm {
+  background: none;
+  border: 2px solid var(--ink);
+  border-radius: 50% !important;
+}
+.gp {
+  background: var(--primary);
+}
+.madeof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-size: 12px;
+}
+.legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The map of a harness */
+.map {
+  padding: 28px 32px;
+  overflow-x: auto;
+}
+.mapgrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px minmax(0, 1fr);
+  align-items: center;
+  min-width: 680px;
+}
+.mapcol {
+  display: flex;
+  flex-direction: column;
+}
+.mapcenter {
+  display: flex;
+  justify-content: center;
+}
+.mapface {
+  width: 150px;
+  height: 150px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mapface rect {
+  fill: none;
+}
+.gl {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 10px;
+}
+.nr {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+}
+.nd {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.wire {
+  flex: 1;
+  height: 1px;
+  background: var(--border-strong);
+  min-width: 20px;
+}
+
+/* Pieces, one collapsible row each */
+.group {
+  display: flex;
+  flex-direction: column;
+}
+.group .gl {
+  margin: 10px 0 6px;
+}
+.piece {
+  border-top: 1px solid var(--hairline);
+  background: var(--paper);
+  scroll-margin-top: 16px;
+}
+.piece summary {
+  display: grid;
+  grid-template-columns: 20px minmax(140px, 240px) minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 48px;
+  padding: 8px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.piece summary::-webkit-details-marker {
+  display: none;
+}
+.piece summary:hover {
+  background: var(--hover);
+}
+.piece[open] summary {
+  border-bottom: 1px solid var(--hairline);
+}
+.pname {
+  font-weight: 500;
+}
+.psum {
+  font-size: 13px;
+}
+.piece .prompt {
+  border: 0;
+  max-height: 520px;
+  overflow: auto;
+}
+@media (max-width: 640px) {
+  .piece summary {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+  }
+  .psum {
+    grid-column: 2 / -1;
+  }
+}
+
+/* Library rows carry one more column: the harness that uses the piece. */
+.piece summary.lib {
+  grid-template-columns: 20px minmax(140px, 220px) minmax(0, 1fr) minmax(120px, auto) auto;
+}
+.piecefoot {
+  padding: 10px 22px 14px;
+  font-size: 13px;
+  border-top: 1px solid var(--hairline);
+}
+@media (max-width: 640px) {
+  .piece summary.lib {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+  }
+}
+
+.ticon {
+  flex: none;
+  display: block;
+}
+.piece summary > .g {
+  justify-self: center;
+}
+
+.madeofitem {
+  display: inline-flex;
+  align-items: center;
+}
+.mapgroup {
+  display: flex;
+  flex-direction: column;
+}
+.mapgroup:first-child .gl {
+  margin-top: 0;
+}
+
+.sayline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.btn.sm {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+/* Editing a piece */
+.editbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 22px 14px;
+  border-top: 1px solid var(--hairline);
+  font-size: 13px;
+}
+.editform {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 22px 0;
+  border-top: 1px solid var(--hairline);
+  font-size: 12px;
+}
+.editform textarea,
+.fld {
+  font: inherit;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12.5px;
+  color: var(--ink);
+  border: 1px solid var(--border-strong);
+  background: var(--paper);
+  padding: 10px 12px;
+  width: 100%;
+}
+.fld {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-size: 13px;
+  height: 36px;
+  padding: 0 10px;
+}
+.editform .editbar {
+  padding: 8px 0 14px;
+  border-top: 0;
+}
+
+/* Harness header, laid out like a GitHub repository: what and whose, the actions, then tabs */
+.hhead {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.htop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px 24px;
+}
+.hid {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+  flex: 1 1 380px;
+}
+.hidtext {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.hdesc {
+  max-width: 640px;
+}
+.hacts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+.hbtns {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 815px) {
+  .hacts {
+    align-items: flex-start;
+  }
+  .hbtns {
+    justify-content: flex-start;
+  }
+}
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 24px;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 40px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  text-decoration: none;
+}
+.tab:hover {
+  color: var(--ink);
+}
+.tab.act {
+  color: var(--ink);
+  border-bottom-color: var(--primary);
+  font-weight: 500;
+}
+.tab .cnt.flag {
+  color: var(--flag);
+}
+.tabnote {
+  font-size: 13px;
+  max-width: 720px;
+}
+.waiting {
+  margin-left: 10px;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* The latest change, as the top strip of the harness box: GitHub's latest-commit bar */
+.lastchange {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--hover);
+  font-size: 13px;
+}
+.avatar {
+  width: 22px;
+  height: 22px;
+  background: var(--primary);
+  color: var(--paper);
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.lcwho {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.lcnote {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lcmeta {
+  white-space: nowrap;
+}
+.lcall {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .lastchange {
+    flex-wrap: wrap;
+  }
+  .lcnote {
+    order: 5;
+    flex-basis: 100%;
+    white-space: normal;
+  }
+}
+
+/* Version and suggestion rows: a badge, two lines of text, who and when */
+.piece summary.hist {
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  min-height: 56px;
+}
+.hmain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.hmain .psum {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hmeta {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.vbadge {
+  font-size: 13px;
+  font-weight: 600;
+}
+.status {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.status.open {
+  color: var(--primary);
+}
+.status.merged {
+  color: var(--ok-ink);
+}
+@media (max-width: 640px) {
+  .piece summary.hist {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+  .hmeta {
+    grid-column: 2;
+  }
+}
+.inlineform {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.inlinemsg {
+  font-size: 12px;
+  max-width: 280px;
+}
+.notice.inset {
+  margin: 0 22px 14px;
+  font-size: 13px;
+}
+
+/* What changed, as removed and added lines */
+.diffs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 22px;
+}
+.diffempty {
+  padding: 14px 22px;
+  font-size: 13px;
+}
+.diffhead {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  background: var(--hover);
+}
+.difflines {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  border: 1px solid var(--border);
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.difflines > span {
+  display: block;
+  padding: 0 10px;
+}
+.difflines .add {
+  background: var(--ok-bg);
+  color: var(--ok-ink);
+}
+.difflines .del {
+  background: var(--no-bg);
+  color: var(--no-ink);
+}
+.difflines .ctx {
+  color: var(--muted);
+}
+.comments {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 22px 14px;
+}
+.comment p {
+  margin-top: 2px;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Under the map: what the harness does. The goal is in the header. */
+.rundoes {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+/* Forms opened from a small button: about, variables, a new piece */
+.inlinebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.editform.flat {
+  border-top: 0;
+  padding: 0;
+  max-width: 760px;
+}
+.editform.flat .editbar {
+  padding-bottom: 0;
+}
+.box.pad {
+  padding: 18px 22px 20px;
+}
+.editform select.fld {
+  appearance: auto;
+}
+.fld.narrow {
+  width: auto;
+  flex: 0 1 260px;
+}
+.choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.varrows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.varrow {
+  display: grid;
+  grid-template-columns: minmax(110px, 160px) minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+@media (max-width: 640px) {
+  .varrow {
+    grid-template-columns: 1fr;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--hairline);
+  }
+}
+.inlineform.spread {
+  display: flex;
+  justify-content: space-between;
+}
+.inlineform.wrap {
+  justify-content: flex-start;
+}
+.inlineform.foot {
+  margin-top: 8px;
+  justify-content: flex-start;
+}
+.tag {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* What only the owner does */
+.piece.owner {
+  border: 1px solid var(--border);
+}
+.piece summary.flatsum {
+  grid-template-columns: minmax(140px, 240px) minmax(0, 1fr);
+}
+.ownerbody {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 16px 22px 20px;
+  font-size: 13px;
+}
+
+/* Where a piece is used, in the library's rows */
+.usedcell {
+  font-size: 13px;
+}
+/* The notes runs left in a memory, under its own text */
+.teamnotes {
+  border-top: 1px solid var(--hairline);
+}
+.teamnotes .gl {
+  margin: 12px 22px 0;
+}
+.teamnotes .prompt {
+  padding-top: 8px;
+}
+.teamnotes p {
+  padding: 8px 22px 14px;
+  font-size: 13px;
+}
+/* A harness's pieces and the version each is at */
+.kv.atversion {
+  grid-template-columns: minmax(160px, 280px) minmax(0, 1fr);
+  font-size: 13px;
+}
+/* Who else gets a change, above the save button */
+.reach {
+  font-size: 13px;
+}
+.h2.big {
+  font-size: 16px;
+  color: var(--ink);
+  margin-bottom: -12px;
+}
+.piece .prompt.bare,
+.prompt.bare {
+  border: 0;
+  max-height: 640px;
+  overflow: auto;
+}
+.rundoes.first {
+  border-top: 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* What waits for the person, on the first page */
+.foryou {
+  padding: 14px 18px 8px;
+}
+.youline {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-top: 1px solid var(--hairline);
+  text-decoration: none;
+  color: var(--ink);
+  font-size: 13px;
+}
+.foryou .h2 {
+  margin-bottom: 8px;
+}
+.youline:hover {
+  color: var(--primary);
+}
+
+/* Runs. A verdict is always said in words; the mark's shape and colour only help the eye. */
+.runline {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: baseline;
+  padding: 10px 18px;
+  border-top: 1px solid var(--hairline);
+  font-size: 13px;
+}
+.runline:first-child {
+  border-top: 0;
+}
+.runline.runhead {
+  font-size: 11px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.rstat {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+/* Went fine: a square. Needs a look: a diamond. Failed: a dash. */
+.rmark {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  display: inline-block;
+  background: var(--run-fine);
+}
+.rmark.flagged {
+  background: var(--run-look);
+  transform: rotate(45deg);
+}
+.rmark.failed {
+  background: var(--run-failed);
+  height: 3px;
+}
+.rnote {
+  overflow-wrap: anywhere;
+}
+.rmeta {
+  white-space: nowrap;
+}
+.tag.you {
+  margin-left: 6px;
+  color: var(--primary);
+  border-color: var(--primary);
+}
+/* What happened after a run that was not fine: open, or dealt with, by whom and how */
+.rfollow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.rfollow form {
+  display: contents;
+}
+.rfollow .fld.narrow {
+  flex: 1 1 220px;
+  max-width: 360px;
+}
+.tag.open {
+  margin-left: 0;
+  color: var(--flag);
+  border-color: var(--flag);
+}
+/* A small action in a line of text */
+.linkbtn {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.linkbtn:hover {
+  color: var(--ink);
+}
+.linkbtn:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+.linkbtn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .runline {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .runline.runhead {
+    display: none;
+  }
+}
+
+/* The three verdicts, listed once above the numbers they explain */
+.verdicts {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  font-size: 12px;
+}
+.verdicts.meanings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--hairline);
+  font-size: 13px;
+}
+.verdicts.meanings li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 18px;
+  border-left: 1px solid var(--hairline);
+}
+.verdicts.meanings li:first-child {
+  border-left: 0;
+}
+
+/* How a run gets here: three steps, then the three verdicts */
+.howruns > summary {
+  padding: 10px 18px;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.howruns > summary::-webkit-details-marker {
+  display: none;
+}
+.howruns > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg);
+}
+.howruns[open] > summary::before {
+  transform: rotate(45deg);
+}
+.howruns > summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--hairline);
+}
+.steps li {
+  display: flex;
+  gap: 12px;
+  padding: 14px 18px;
+  border-left: 1px solid var(--hairline);
+  font-size: 13px;
+}
+.steps li:first-child {
+  border-left: 0;
+}
+.steps li > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.stepn {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 11px;
+}
+.stept {
+  font-weight: 500;
+}
+.steps .mono {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+/* The two sentences that say how far to trust the numbers: in full ink, not in the grey of a footnote. */
+.howwho,
+.howfine {
+  padding: 10px 18px;
+  border-top: 1px solid var(--hairline);
+  font-size: 13px;
+}
+.howwho {
+  font-weight: 500;
+}
+@media (max-width: 760px) {
+  .steps,
+  .verdicts.meanings {
+    grid-template-columns: 1fr;
+  }
+  .steps li,
+  .verdicts.meanings li {
+    border-left: 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .steps li:first-child,
+  .verdicts.meanings li:first-child {
+    border-top: 0;
+  }
+}
+
+/* Stats: one period, one filter, five numbers, then a row of thin columns per harness on a shared scale */
+.statshead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.statshead .tabnote {
+  margin-top: 6px;
+}
+/* A choice between two or three views of the same page */
+.seg2 {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  font-size: 13px;
+  flex: none;
+}
+.seg2 a {
+  padding: 5px 12px;
+  color: var(--muted);
+  text-decoration: none;
+  border-left: 1px solid var(--border-strong);
+  white-space: nowrap;
+}
+.seg2 a:first-child {
+  border-left: 0;
+}
+.seg2 a:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+.seg2 a[aria-current] {
+  background: var(--ink);
+  color: var(--paper);
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+.tile {
+  padding: 16px 18px;
+}
+/* A large standalone number takes the font's own figures: equal-width digits look loose at this size. */
+.tilevalue {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.tilelabel {
+  margin-top: 6px;
+  font-weight: 500;
+}
+.tilehint {
+  font-size: 12px;
+}
+.sechead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.scrollx {
+  overflow-x: auto;
+}
+.daytable {
+  border-collapse: collapse;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  width: 100%;
+  min-width: 760px;
+  font-size: 13px;
+}
+.daytable th,
+.daytable td {
+  padding: 8px 2px 6px;
+  border-top: 1px solid var(--hairline);
+  text-align: center;
+  vertical-align: bottom;
+  font-weight: 400;
+}
+.daytable thead th {
+  border-top: 0;
+  color: var(--muted);
+  font-size: 11px;
+  padding-top: 10px;
+  white-space: nowrap;
+}
+.daytable thead th[data-today] {
+  color: var(--ink);
+  font-weight: 500;
+}
+.daytable th[scope="row"],
+.daytable thead th:first-child {
+  text-align: left;
+  padding-left: 16px;
+  padding-right: 12px;
+  min-width: 170px;
+  vertical-align: middle;
+}
+.daytable th[scope="row"] .who {
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+}
+.daytable .num {
+  text-align: right;
+  padding: 8px 12px;
+  vertical-align: middle;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.daytable .how {
+  text-align: left;
+  padding: 8px 16px 8px 8px;
+  vertical-align: middle;
+  min-width: 190px;
+  font-size: 12px;
+}
+.daytable td.how .vbar {
+  margin-bottom: 5px;
+}
+/* One day of one harness: a thin column, went fine at the bottom, trouble on top */
+.daycell {
+  cursor: default;
+}
+.daycell:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.stack {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  height: 54px;
+}
+.seg {
+  width: 14px;
+  flex: none;
+  background: var(--run-fine);
+}
+.seg.flagged {
+  background: var(--run-look);
+}
+.seg.failed {
+  background: var(--run-failed);
+}
+/* The data end is rounded, the baseline stays square. */
+.stack .seg:last-child {
+  border-radius: 3px 3px 0 0;
+}
+.seg.none {
+  height: 1px;
+  background: var(--border-strong);
+  border-radius: 0;
+}
+.daycell:hover .seg:not(.none),
+.daycell:focus .seg:not(.none) {
+  filter: brightness(0.85);
+}
+.daycount {
+  display: block;
+  height: 14px;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--muted);
+}
+/* The note for a hovered or focused day. Placed against the window, so the table's edge cannot cut it. */
+.daytip {
+  position: fixed;
+  z-index: 20;
+  transform: translate(-50%, calc(-100% - 6px));
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.daytip[data-below] {
+  transform: translate(-50%, 6px);
+}
+.tiprow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chartnote {
+  font-size: 12px;
+  max-width: 760px;
+}
+/* How a set of runs went: one thin bar in up to three parts, next to the same counts in words */
+.vbar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  width: 100%;
+  max-width: 220px;
+}
+.vseg {
+  flex: 1 1 0;
+  min-width: 3px;
+  background: var(--run-fine);
+}
+.vseg.flagged {
+  background: var(--run-look);
+}
+.vseg.failed {
+  background: var(--run-failed);
+}
+.vseg:first-child {
+  border-radius: 4px 0 0 4px;
+}
+.vseg:last-child {
+  border-radius: 0 4px 4px 0;
+}
+.vseg:only-child {
+  border-radius: 4px;
+}
+/* A piece that gave trouble: what, how often, what the last run said, and what happened since */
+.trouble {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 16px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--hairline);
+  font-size: 13px;
+}
+.trouble:first-child {
+  border-top: 0;
+}
+.tname {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-weight: 500;
+}
+.tname .mu {
+  font-weight: 400;
+}
+.tcount {
+  text-align: right;
+  white-space: nowrap;
+}
+.tlast,
+.tsince {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+.tsince {
+  font-size: 12px;
+}
+/* The Runs tab of one harness: how its runs went, and which ones to list */
+.runsum {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px 20px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.runsumtext {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.runsumtext .vbar {
+  max-width: 360px;
+}
+
+/* Members and the list of other agents */
+.kv.wide {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.kv.agent {
+  grid-template-columns: 150px minmax(0, 1fr);
+}
+.code.block {
+  display: block;
+  flex: none;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.youmore {
+  padding: 8px 0;
+  border-top: 1px solid var(--hairline);
+  font-size: 13px;
+}
+.ownerbody .inlineform {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+/* Private: only its owner and its editors see it */
+.privtag {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 16px;
+}
